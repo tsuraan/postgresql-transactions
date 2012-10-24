@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Database.PostgreSQL.Simple.Transactions
 ( PgTx
-, Query  -- re-export for convenience
-, Only   -- re-export for convenience
-, txConn -- raw connection access for functions I didn't re-implement
+, Query    -- re-export for convenience
+, Only(..) -- re-export for convenience
+, txConn   -- raw connection access for functions I didn't re-implement
 , connect
 , wrap
 , close
