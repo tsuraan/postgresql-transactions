@@ -1,0 +1,17 @@
+Name:           postgresql-transactions
+Version:        0.0.1
+Description:    A convenient way to abstract checkpoints and transactions
+License:        BSD3
+Author:         Jeremy Groven
+Maintainer:     Jeremy Groven
+Build-Type:     Simple
+Cabal-Version:  >=1.2
+
+Library
+  Build-Depends: base
+               , postgresql-simple
+               , bytestring
+               , random
+
+  Exposed-Modules: Database.PostgreSQL.Simple.Transactions
+
