@@ -4,44 +4,77 @@ provide a convenient and composable transactions system.  As a quick example,
 one can write code like this:
 
     {-# LANGUAGE OverloadedStrings #-}
+    {-|
+      This is a simple motivating example for why postgresql-transactions may be
+      a useful thing to have.  Prepare the database with the following:
+    
+      BEGIN;
+      CREATE TABLE Users( userid SERIAL NOT NULL PRIMARY KEY
+                        , username TEXT NOT NULL UNIQUE);
+    
+      CREATE TABLE Messages( msgid SERIAL NOT NULL PRIMARY KEY
+                           , msg TEXT NOT NULL UNIQUE);
+    
+      CREATE TABLE Logs( logid SERIAL NOT NULL PRIMARY KEY
+                       , logged TIMESTAMP NOT NULL DEFAULT now()
+                       , userid INT NOT NULL REFERENCES Users
+                       , msgid INT NOT NULL REFERENCES Messages
+                       );
+      COMMIT;
+    -}
+    
     import Database.PostgreSQL.Simple.Transactions
+    import Data.ByteString ( ByteString )
     import Control.Exception
     
-    checkFirst :: PgTx -> IO Int
-    checkFirst pg = withTransaction pg mkRow `onException` readRow
+    getOrCreate :: PgTx -> Query -> Query -> ByteString -> IO Int
+    getOrCreate pg get create value = readRow
       where
-      mkRow pg' = do
-        [Only r] <- query_ pg' "INSERT INTO T1(a,b) VALUES(1,2) RETURNING id"
-        return r
-    
       readRow :: IO Int
       readRow = do
-        [Only r] <- query_ pg "SELECT id FROM T1 WHERE a=1 AND b=2"
-        return r
+        rows <- query pg get (Only value)
+        case rows of
+          []           -> withTransaction pg mkRow `onException` readRow
+          [Only rowid] -> return rowid
     
-    checkSecond :: PgTx -> IO Int
-    checkSecond pg = withTransaction pg mkRow `onException` readRow
-      where
+      mkRow :: PgTx -> IO Int
       mkRow pg' = do
-        [Only r] <- query_ pg' "INSERT INTO T2(a,b) VALUES(1,2) RETURNING id"
+        [Only r] <- query pg' create (Only value)
         return r
     
-      readRow :: IO Int
-      readRow = do
-        [Only r] <- query_ pg "SELECT id FROM T2 WHERE a=1 AND b=2"
-        return r
+    getUserId :: PgTx -> ByteString -> IO Int
+    getUserId pg =
+      getOrCreate pg
+                  "SELECT userid FROM Users WHERE username=?"
+                  "INSERT INTO Users(username) VALUES(?) RETURNING userid"
     
-    doBoth :: PgTx -> IO (Int, Int)
-    doBoth pg = withTransaction pg checks
+    getMsgId :: PgTx -> ByteString -> IO Int
+    getMsgId pg = 
+      getOrCreate pg
+                  "SELECT msgid FROM Messages where msg=?"
+                  "INSERT INTO Messages(msg) VALUES(?) RETURNING msgid"
+    
+    logMsg :: PgTx -> ByteString -> ByteString -> IO Int
+    logMsg pg username msg = withTransaction pg go
       where
-      checks pg' = do
-        a <- checkFirst pg'
-        b <- checkSecond pg'
-        return (a,b)
+      go :: PgTx -> IO Int
+      go pg' = do
+        userid <- getUserId pg' username
+        msgid  <- getMsgId pg' msg
+        [Only logid] <- query pg' "INSERT INTO Logs(userid, msgid) VALUES(?, ?) \
+                                  \RETURNING logid"
+                                  (userid, msgid)
+        return logid
     
     main = do
-      c <- connect "dbname=tsuraan"
-      doBoth c >>= print
+      c <- connect "host=localhost"
+      getUserId c "jim" >>= \jimid -> putStrLn ("jim id is " ++ (show jimid))
+      logMsg c "al" "login" >>= print
+      logMsg c "bob" "login" >>= print
+      logMsg c "al" "read email" >>= print
+      logMsg c "al" "logout" >>= print
+      logMsg c "bob" "logout" >>= print
+
 
 So, basically transactions are composable, which is a bit nicer than having
 some functions manually use savepoints, while other functions use
