@@ -15,6 +15,17 @@ module Database.PostgreSQL.Simple.Transactions
 , execute
 , execute_
 , executeMany
+
+, FoldOptions(..) -- re-export for convenience
+, FetchQuantity(..) -- re-export for convenience
+, defaultFoldOptions
+
+, fold
+, foldWithOptions
+, fold_
+, foldWithOptions_
+, forEach
+, forEach_
 ) where
 
 import qualified Database.PostgreSQL.Simple as S
@@ -23,7 +34,9 @@ import Control.Applicative ( (<$>) )
 import System.Random ( randomRIO )
 import Control.Monad ( replicateM )
 import Database.PostgreSQL.Simple ( Connection, IsolationLevel(..)
-                                  , connectPostgreSQL, Only, Query )
+                                  , connectPostgreSQL, Only, Query
+                                  , FoldOptions(..), FetchQuantity(..)
+                                  , defaultFoldOptions )
 import Data.ByteString ( ByteString )
 import Control.Exception ( mask, onException )
 import Data.String ( IsString(fromString) )
@@ -80,6 +93,29 @@ execute_ = S.execute_ . txConn
 
 executeMany :: S.ToRow q => PgTx -> S.Query -> [q] -> IO Int64
 executeMany = S.executeMany . txConn
+
+fold :: (S.FromRow row, S.ToRow params)
+     => PgTx -> S.Query -> params -> a -> (a -> row -> IO a) -> IO a
+fold = S.fold . txConn
+
+foldWithOptions :: (S.FromRow row, S.ToRow params)
+                => FoldOptions -> PgTx -> S.Query -> params -> a 
+                -> (a -> row -> IO a) -> IO a
+foldWithOptions opts = S.foldWithOptions opts . txConn
+
+fold_ :: S.FromRow r => PgTx -> S.Query -> a -> (a -> r -> IO a) -> IO a
+fold_ = S.fold_ . txConn
+
+foldWithOptions_ :: S.FromRow r => FoldOptions -> PgTx -> S.Query -> a
+                 -> (a -> r -> IO a) -> IO a
+foldWithOptions_ opts = S.foldWithOptions_ opts . txConn
+
+forEach :: (S.ToRow q, S.FromRow r) => PgTx -> S.Query -> q
+        -> (r -> IO ()) -> IO ()
+forEach = S.forEach . txConn
+
+forEach_ :: S.FromRow r => PgTx -> S.Query -> (r -> IO ()) -> IO ()
+forEach_ = S.forEach_ . txConn
 
 withSavepoint :: Connection -> IO a -> IO a
 withSavepoint conn act = do
